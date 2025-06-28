@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug index_builder with PDF",
+      "type": "debugpy",
+      "request": "launch",
+
+      // ❶ What to run
+     // "program": "web_app.py",
+
+      // ❷ Command-line arguments (your PDF path here)
+            "module": "streamlit",
+
+      "args": ["run", "web_app.py"],
+
+      // ❸ Use your project venv
+      "console": "integratedTerminal"
+    }
+  ]
+}
