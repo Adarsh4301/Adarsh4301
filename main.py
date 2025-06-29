@@ -1,8 +1,4 @@
-"""
-Smoke-test:
-1. Embed one sentence with Hugging Face InferenceClient
-2. Upsert the vector into your Qdrant Cloud collection
-"""
+
 
 import sys
 from embeddings import embed               # local module in the same folder

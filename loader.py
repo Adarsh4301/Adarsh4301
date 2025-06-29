@@ -1,8 +1,3 @@
-# app/loader.py
-"""
-PDF → list[str]  (one clean page per item)
- & "C:\Users\adars\AppData\Local\Programs\Python\Python313\python.exe" -m pip install requests
-"""
 
 from pathlib import Path
 from typing import List

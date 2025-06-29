@@ -1,9 +1,4 @@
-"""
-End-to-end Retrieval-Augmented-Generation CLI.
 
-$ python app/rag_cli.py
-Question: What benefits does nature provide?
-"""
 import sys
 from retriever import fetch_relevant_chunks
 from llm_client import chat
