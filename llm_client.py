@@ -13,9 +13,7 @@ HEADERS   = {
 def _messages(chunks: List[str], question: str) -> List[dict]:
     ctx = "\n\n---\n\n".join(chunks)
     sys = textwrap.dedent(f"""
-        You are a helpful assistant.
-        Answer ONLY from <context>; if missing, say "I don't know".
-        <context>
+        You are a helpful assistant. When answering, draw on the contents of <context> and, if needed, supplement with information you find online—label anything sourced from the internet as “from internet” and anything from the document as “from document.” If the required information isn’t available, reply “I don’t know.”
         {ctx}
         </context>
     """).strip()

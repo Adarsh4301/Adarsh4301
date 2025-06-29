@@ -6,13 +6,15 @@
       "type": "debugpy",
       "request": "launch",
 
-      // 🠗 full path to the script inside the app folder
-      "program": "index_builder.py",
+      // ❶ What to run
+     // "program": "web_app.py",
 
-      // 🠗 PDF filename or path you want to index
-      "args": ["abc.pdf"],
+      // ❷ Command-line arguments (your PDF path here)
+            "module": "streamlit",
 
-      // (optional) where to show stdout/stderr
+      "args": ["run", "web_app.py"],
+
+      // ❸ Use your project venv
       "console": "integratedTerminal"
     }
   ]
