@@ -1,51 +1,50 @@
 import streamlit as st
+from uploader import ingest_pdf
 from retriever import fetch_relevant_chunks
 from llm_client import chat_stream
 
-st.set_page_config(page_title="PDF-RAG Demo", page_icon="📚", layout="centered")
-
-# ---------- simple CSS tweaks ----------
-st.markdown(
-    """
-    <style>
-      .block-container { padding-top: 2rem; }
-      .answer-box      { border: 2px solid #4f8bf9; border-radius: 0.5rem;
-                         padding: 1rem; background: #f7fbff; }
-      .sources li      { line-height: 1.35; margin-bottom: .5rem;}
-      .spinner         { font-size:1.2em; animation: blink 1s steps(2, start) infinite; }
-      @keyframes blink { 50% { opacity: 0; } }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.set_page_config(page_title="PDF-RAG Demo",
+                   page_icon=":books:", layout="centered")
 
 st.title("📚 PDF-RAG Demo (Groq)")
 
-with st.form("query"):
-    question = st.text_input("Ask a question about your PDF")
+# -------- 1) UPLOAD FORM --------
+with st.expander("➕ Upload & index a PDF", expanded=False):
+    upload = st.file_uploader(
+        "Choose a PDF",
+        type="pdf",
+        help="The file is processed only in memory; no data is stored permanently.",
+    )
+    if upload and st.button("Index now 🚀"):
+        with st.spinner("Embedding & inserting into Qdrant …"):
+            ingest_pdf(upload)
+        st.success("Done! Ask anything about that PDF ↓")
+
+st.divider()
+
+# -------- 2) QUESTION FORM --------
+with st.form("ask_form"):
+    question = st.text_input("Ask a question")
     submitted = st.form_submit_button("🔍 Search")
 
 if submitted and question:
-    # --- retrieval ---
+    # ---- retrieval
     hits = fetch_relevant_chunks(question, k=5)
     ctx  = [h.payload["text"] for h in hits]
 
-    # --- animated answer box ---
-    answer_box = st.empty()
-    answer_box.markdown('<div class="answer-box">⌛ thinking&nbsp;<span class="spinner">|</span></div>', unsafe_allow_html=True)
-
+    # ---- streaming answer
+    placeholder = st.empty()
     buf = ""
     for tok in chat_stream(ctx, question):
         buf += tok
-        answer_box.markdown(f'<div class="answer-box">{buf}▌</div>', unsafe_allow_html=True)
+        placeholder.markdown(f"#### Answer\n\n{buf}▌")
+    placeholder.markdown(f"#### Answer\n\n{buf}")
 
-    # final render (remove cursor)
-    answer_box.markdown(f'<div class="answer-box">{buf}</div>', unsafe_allow_html=True)
-
-    # --- cite sources ---
+    # ---- citations
     st.subheader("Sources")
-    st.markdown("<ul class='sources'>", unsafe_allow_html=True)
     for h in hits:
         preview = h.payload["text"][:100].replace("\n", " ") + "…"
-        st.markdown(f"<li><b>score {h.score:.2f}</b> · {preview}</li>", unsafe_allow_html=True)
-    st.markdown("</ul>", unsafe_allow_html=True)
+        st.markdown(
+            f"- p.{h.payload.get('page','?')} ·"
+            f" **{h.score:.2f}** &nbsp; {preview}"
+        )
