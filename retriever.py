@@ -1,57 +1,97 @@
-# app/retriever.py
 """
-Given a question string ➜ return top-k chunk texts from Qdrant.
+Retrieve top-k chunks from Qdrant.
+Optional arg `file_filter` lets you restrict search to a single PDF.
 """
+
 import os
-from typing import List
+from typing import List, Optional
 from dotenv import load_dotenv
 load_dotenv()
 
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, ScoredPoint
-
-from embeddings import embed          # same HF embedder you used before
-
-# ---------------- Qdrant client ----------------
-client = QdrantClient(
-    url=os.getenv("QDRANT_URL"),
-    api_key=os.getenv("QDRANT_API_KEY"),
+from qdrant_client.models import (
+    ScoredPoint,
+    Filter,
+    FieldCondition,
+    MatchValue,
 )
 
-COLLECTION = "docs"                   # same as in vector_store.py
-TOP_K      = 5                        # you can tune later
+from embeddings import embed
+
+# ───────────────────────── Qdrant connection ────────────────────────────────
+client = QdrantClient(
+    url     = os.getenv("QDRANT_URL"),      # e.g. https://xyz.cloud.qdrant.io
+    api_key = os.getenv("QDRANT_API_KEY"),
+)
+
+COLLECTION = "docs"
+TOP_K      = 5
 
 
-def fetch_relevant_chunks(question: str, k: int = TOP_K) -> List[ScoredPoint]:
+# ────────────────────────── main fetch helper ───────────────────────────────
+def fetch_relevant_chunks(
+    question: str,
+    k: int = TOP_K,
+    file_filter: Optional[str] = None,
+) -> List[ScoredPoint]:
     """
-    1. Embed the question text.
-    2. Use Qdrant 'search' to get top-k similar points.
-    3. Return the raw ScoredPoint objects (include score & payload).
+    1. Embed the question.
+    2. Search the `docs` collection, optionally restricted to one PDF.
+    3. Return raw ScoredPoint objects (score + payload).
     """
-    q_vec = embed(question)           # ① embed question
+    q_vec = embed(question)
+
+    # Optional filename filter
+    filt = None
+    if file_filter and file_filter != "All":
+        filt = Filter(must=[
+            FieldCondition(key="file", match=MatchValue(value=file_filter))
+        ])
+
+    # NOTE: use query_filter (not filter) with `.search()`
     hits = client.search(
-        collection_name=COLLECTION,
-        query_vector=q_vec,
-        limit=k,
-        with_payload=True             # crucial – we need the chunk text!
+        collection_name = COLLECTION,
+        query_vector    = q_vec,
+        limit           = k,
+        with_payload    = True,
+        query_filter    = filt,        # ← fixed argument name
     )
     return hits
 
 
-# ---- quick test when run directly (python app/retriever.py) --------------
+# ───────────────────── helper to populate the dropdown ──────────────────────
+def list_files() -> List[str]:
+    """Return a sorted list of distinct filenames stored in Qdrant."""
+    files, offset = set(), None
+    while True:
+        batch, offset = client.scroll(
+            collection_name = COLLECTION,
+            limit           = 256,
+            with_payload    = {"include": ["file"]},
+            offset          = offset,
+        )
+        for pt in batch:
+            if "file" in pt.payload:
+                files.add(pt.payload["file"])
+        if offset is None:
+            break
+    return sorted(files)
+
+
+# ───────────────────────── CLI quick-test block ─────────────────────────────
 if __name__ == "__main__":
     import sys
     from tabulate import tabulate
 
     if len(sys.argv) < 2:
-        print("Usage: python app/retriever.py \"Your question here\"")
+        print("Usage: python app/retriever.py \"Your question\" [file.pdf]")
         sys.exit(1)
 
-    query = " ".join(sys.argv[1:])
-    results = fetch_relevant_chunks(query)
+    q   = sys.argv[1]
+    pdf = sys.argv[2] if len(sys.argv) > 2 else None
 
-    rows = [
-        (round(hit.score, 3), hit.payload["text"][:80] + "…")
-        for hit in results
-    ]
-    print(tabulate(rows, headers=["score", "chunk preview"]))
+    res = fetch_relevant_chunks(q, file_filter=pdf)
+    rows = [(h.payload.get("file","?"), h.payload.get("page","?"),
+             round(h.score,3), h.payload["text"][:70]+"…")
+            for h in res]
+    print(tabulate(rows, headers=["file","pg","score","preview"]))

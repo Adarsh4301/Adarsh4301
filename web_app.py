@@ -1,50 +1,63 @@
 import streamlit as st
-from uploader import ingest_pdf
-from retriever import fetch_relevant_chunks
+from uploader   import ingest_pdf
+from retriever  import fetch_relevant_chunks
 from llm_client import chat_stream
 
-st.set_page_config(page_title="PDF-RAG Demo",
-                   page_icon=":books:", layout="centered")
+st.set_page_config(page_title="PDF-RAG Demo", page_icon="📚",
+                   layout="centered")
+
+# ---------- basic style ----------
+st.markdown(
+    """
+    <style>
+      .answer-box {border:2px solid #4f8bf9;border-radius:8px;
+                   padding:1rem;background:#f7fbff}
+      .spinner {animation:blink 1s steps(2,start) infinite}
+      @keyframes blink{50%{opacity:0}}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 st.title("📚 PDF-RAG Demo (Groq)")
 
-# -------- 1) UPLOAD FORM --------
-with st.expander("➕ Upload & index a PDF", expanded=False):
-    upload = st.file_uploader(
-        "Choose a PDF",
-        type="pdf",
-        help="The file is processed only in memory; no data is stored permanently.",
-    )
-    if upload and st.button("Index now 🚀"):
-        with st.spinner("Embedding & inserting into Qdrant …"):
-            ingest_pdf(upload)
-        st.success("Done! Ask anything about that PDF ↓")
+# ---------- 1) Upload & Index ----------
+with st.expander("➕ Upload PDF", expanded=False):
+    up = st.file_uploader("Choose a PDF file", type="pdf")
+    if up and st.button("Index now 🚀"):
+        with st.spinner("Embedding & inserting …"):
+            ingest_pdf(up)
+        st.success("Indexed! Ask away ↓")
 
 st.divider()
 
-# -------- 2) QUESTION FORM --------
-with st.form("ask_form"):
-    question = st.text_input("Ask a question")
-    submitted = st.form_submit_button("🔍 Search")
+# ---------- 2) Ask a question ----------
+with st.form("ask"):
+    q = st.text_input("Ask a question about the uploaded PDF")
+    run = st.form_submit_button("🔍 Search")
 
-if submitted and question:
-    # ---- retrieval
-    hits = fetch_relevant_chunks(question, k=5)
+if run and q:
+    hits = fetch_relevant_chunks(q, k=5)
     ctx  = [h.payload["text"] for h in hits]
 
-    # ---- streaming answer
-    placeholder = st.empty()
+    box = st.empty()
     buf = ""
-    for tok in chat_stream(ctx, question):
-        buf += tok
-        placeholder.markdown(f"#### Answer\n\n{buf}▌")
-    placeholder.markdown(f"#### Answer\n\n{buf}")
+    box.markdown('<div class="answer-box">⌛ thinking <span class="spinner">|</span></div>',
+                 unsafe_allow_html=True)
 
-    # ---- citations
+    for tok in chat_stream(ctx, q):
+        buf += tok
+        box.markdown(f'<div class="answer-box">{buf}▌</div>', unsafe_allow_html=True)
+
+    box.markdown(f'<div class="answer-box">{buf}</div>', unsafe_allow_html=True)
+
     st.subheader("Sources")
+
     for h in hits:
-        preview = h.payload["text"][:100].replace("\n", " ") + "…"
-        st.markdown(
-            f"- p.{h.payload.get('page','?')} ·"
-            f" **{h.score:.2f}** &nbsp; {preview}"
-        )
+     preview = h.payload["text"][:100].replace("\n", " ") + "…"
+     page = h.payload.get("page", "?")            # tolerate missing key
+     st.markdown(
+        f"- p.{page} • <b>{h.score:.2f}</b> – {preview}",
+        unsafe_allow_html=True
+     )
+
