@@ -1,38 +1,39 @@
-
+"""
+Embed every chunk of a PDF and batch-upload to Qdrant.
+Usage:  python app/index_builder.py docs/abc.pdf
+"""
 import sys, time, uuid
 from pathlib import Path
 from tqdm import tqdm
 
 from embeddings   import embed
-from vector_store import client, COLLECTION         # uses same client
+from vector_store import client, COLLECTION
 from loader       import load_pdf
 from text_chunker import split_text
 
-BATCH = 32                       # nice for free-tier HF
+BATCH = 32
 
 def main(pdf_path: str):
-    pages = load_pdf(pdf_path)
+    pdf_name = Path(pdf_path).name            # e.g. "abc.pdf"
+    pages    = load_pdf(pdf_path)
     print(f"Loaded {len(pages)} pages")
 
-    chunks = []
-    for page_num, page in enumerate(pages, start=1):
-        for chunk_idx, chunk in enumerate(split_text(page)):
-            chunks.append((chunk, page_num, chunk_idx))
+    rows = []
+    for pg, page in enumerate(pages, start=1):
+        for idx, chunk in enumerate(split_text(page)):
+            rows.append((chunk, pg, idx, pdf_name))
 
-    print(f"Total chunks: {len(chunks)}")
+    print(f"Total chunks: {len(rows)}")
 
-    for i in tqdm(range(0, len(chunks), BATCH), desc="Embedding"):
-        batch = chunks[i : i + BATCH]
+    for i in tqdm(range(0, len(rows), BATCH), desc="Embedding"):
+        batch   = rows[i : i + BATCH]
+        vectors = [embed(r[0]) for r in batch]
+        time.sleep(1)                         # polite pause
 
-        # ---- 1) embed
-        vectors = [embed(c[0]) for c in batch]      # index 0 = text
-        time.sleep(1)                               # polite
-
-        # ---- 2) build parallel lists for upload_collection
         ids     = [uuid.uuid4().int >> 96 for _ in batch]
         payload = [
-            {"text": text, "page": pg, "chunk": idx}
-            for (text, pg, idx) in batch
+            {"text": t, "page": pg, "chunk": idx, "file": fname}
+            for (t, pg, idx, fname) in batch
         ]
 
         client.upload_collection(
@@ -40,7 +41,7 @@ def main(pdf_path: str):
             vectors=vectors,
             payload=payload,
             ids=ids,
-            batch_size=BATCH
+            batch_size=BATCH,
         )
 
     print("✓ PDF indexed into Qdrant")
